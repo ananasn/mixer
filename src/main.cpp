@@ -33,7 +33,7 @@ float time_left = 5000;
 float time_right = 10000;
 float time_wait = 5000;
 
-//States
+// States
 const uint8_t INITIAL = 0;
 const uint8_t INIIAL_HEAT = 1;
 const uint8_t FLOW = 2;
@@ -46,7 +46,7 @@ TimerMs timer_left(time_left, 0, 1);
 TimerMs timer_right(time_right, 0, 1);
 TimerMs timer_wait(time_wait, 0, 1);
 
-//Sensors
+// Sensors
 OneWire  ds(THERMAL_SENSOR);
 DallasTemperature sensors(&ds);
 byte addr_tleft[8] = {0x28, 0xff, 0xed, 0x7, 0xd6, 0x1, 0x3c, 0xe9};
@@ -164,10 +164,10 @@ void heater_off()
 
 void loop() 
 {
-
   read_temperature();
   switch (state) 
   {
+    
     case INITIAL:
       if (DEBUG) Serial.println("INITIAL");
       if (start == true) state = INIIAL_HEAT;
