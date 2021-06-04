@@ -74,16 +74,20 @@ void setup()
 // Debug function for 1-wire adresses exploring
 void search_addrs() 
 {
-  while (true) {
-    if ( ds.search(addr)) {
+  while (true) 
+  {
+    if ( ds.search(addr)) 
+    {
       Serial.println("ADDR:");
-        for (int i=0; i < 8; i++) {
+        for (int i=0; i < 8; i++) 
+        {
           Serial.print(addr[i], HEX);
           Serial.print(" ");
         }
       Serial.println();
     }
-    else {
+    else 
+    {
       Serial.println("No more addresses.");
       Serial.println();
       ds.reset_search();
@@ -167,7 +171,7 @@ void loop()
   read_temperature();
   switch (state) 
   {
-    
+
     case INITIAL:
       if (DEBUG) Serial.println("INITIAL");
       if (start == true) state = INIIAL_HEAT;
