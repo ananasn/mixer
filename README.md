@@ -1,0 +1,1 @@
+(stty raw; cat > received.txt) < /dev/ttyUSB0
