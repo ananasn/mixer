@@ -2,6 +2,7 @@
 #include <OneWire.h>
 #include <DallasTemperature.h>
 #include <TimerMs.h>
+#include "GyverRelay.h"
 
 
 bool DEBUG = true;
@@ -13,6 +14,8 @@ int MIXER_PIN = 26;
 int PUMP_LEFT_PIN = 32;
 int PUMP_RIGHT_PIN = 33;
 int HEATER_PIN = 27;
+int LEFT_HEATER_PIN = 22;
+int RIGHT_HEATER_PIN = 21;
 
 // Network variables list
 bool start;
@@ -20,18 +23,20 @@ bool pump_left;
 bool pump_right;
 bool mixer;
 bool heater;
+bool left_heater;
+bool right_heater;
 float tleft;
 float tright;
 float tcenter;
 float tctrl;
 
 // Constants settings
-float tleft_target = 29;
-float tright_target = 29;
-float tcenter_target = 32;
-float time_left = 5000;
-float time_right = 10000;
-float time_wait = 5000;
+float tleft_target = 50;
+float tright_target = 58;
+float tcenter_target = 60;
+float time_left = 168000;
+float time_right = 192000;
+float time_wait = 300000;
 
 // States
 const uint8_t INITIAL = 0;
@@ -55,10 +60,26 @@ byte addr_tcenter[8] = {0x28, 0x3d, 0x30, 0x7, 0xd6, 0x1, 0x3c, 0xaa};
 byte addr_tctrl[8] = {0x28, 0xd1, 0x82, 0x7, 0xd6, 0x1, 0x3c, 0x32};
 byte addr[8];
 
+//Regulators
+GyverRelay lregulator(REVERSE);
+GyverRelay rregulator(REVERSE);
+
 
 void setup() 
 {
-  Serial.begin(9600);
+  // Set right heater regulator parameters
+  pinMode(LEFT_HEATER_PIN, OUTPUT);
+  pinMode(RIGHT_HEATER_PIN, OUTPUT);
+  rregulator.setpoint = tright_target;
+  rregulator.hysteresis = 1;
+  rregulator.k = 0;
+
+  //Set left heater regulator parameters
+  lregulator.setpoint = tleft_target;
+  lregulator.hysteresis = 1;
+  lregulator.k = 0;
+
+  Serial.begin(115200);
   sensors.setResolution(12);
   timer_left.setTimerMode();
   timer_right.setTimerMode();
@@ -114,13 +135,28 @@ void info()
   Serial.print(" ");
   Serial.print(mixer);
   Serial.print(" ");
-  Serial.println(heater);
+  Serial.print(heater);
+  Serial.print(" ");
+  Serial.print(left_heater);
+  Serial.print(" ");
+  Serial.println(right_heater);
+}
+
+void regulate_left_heater(boolean value) {
+  digitalWrite(LEFT_HEATER_PIN, value);
+  left_heater = value;
+}
+
+void regulate_right_heater(boolean value) {
+  digitalWrite(RIGHT_HEATER_PIN, value);
+  right_heater = value;
 }
 
 // Reads temperatures from 1-wire bus
 void read_temperature() 
 {
   sensors.requestTemperatures();
+  delay(200);
   tleft = sensors.getTempC(addr_tleft);
   tright = sensors.getTempC(addr_tright);
   tcenter = sensors.getTempC(addr_tcenter);
@@ -179,8 +215,14 @@ void loop()
 
     case INIIAL_HEAT:
       if (DEBUG) Serial.println("INITIAL_HEAT");
+        rregulator.input = tright;
+        lregulator.input = tleft;
+        regulate_left_heater(!lregulator.getResult());
+        regulate_right_heater(!rregulator.getResult());
       if ((tleft >= tleft_target) and (tright >= tright_target)) 
       {
+          regulate_right_heater(HIGH); //off
+          regulate_left_heater(HIGH); //off
           pump_on(PUMP_LEFT_PIN);
           pump_on(PUMP_RIGHT_PIN);
           timer_left.start();
