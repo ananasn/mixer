@@ -281,6 +281,8 @@
 
 bool DEBUG = true;
 
+float ML_PER_SEC = 29.3;
+
 // PINS list
 int THERMAL_SENSOR = 4;
 int MIXER_PIN = 26;
@@ -303,8 +305,8 @@ float tctrl;
 float tleft_target = 30;
 float tright_target = 35;
 float tcenter_target = 40;
-float time_left = 120000;
-float time_right = 120000;
+float time_left = ((5 * 1000) / ML_PER_SEC) * 1000;
+float time_right = ((5 * 1000) / ML_PER_SEC) * 1000;
 float time_wait = 60000;
 
 // States
@@ -336,6 +338,18 @@ char pass[] = "suzumiaharuhi";
 // Modbus server
 ModbusServerWiFi MBserver;
 IPAddress lIP;                     // assigned local IP
+
+// Work address
+// IPAddress local_IP(10, 77, 70, 120);
+// IPAddress gateway(10, 77, 70, 1);
+// Home address
+IPAddress local_IP(192, 168, 1, 120);
+IPAddress gateway(192, 168, 1, 1);
+
+IPAddress subnet(255, 255, 255, 0);
+IPAddress primaryDNS(8, 8, 8, 8);   // optional
+IPAddress secondaryDNS(8, 8, 4, 4); // optional
+
 const uint8_t MY_SERVER(1);
 
 // Reads temperatures from 1-wire bus
@@ -493,7 +507,12 @@ void setup()
   MBserver.registerWorker(MY_SERVER, READ_HOLD_REGISTER, &FC03);
   // Register the worker function again for another FC
   MBserver.registerWorker(MY_SERVER, READ_INPUT_REGISTER, &FC03);
-  
+
+  // Configures static IP address
+  if (!WiFi.config(local_IP, gateway, subnet, primaryDNS, secondaryDNS)) {
+    Serial.println("STA Failed to configure");
+  }
+
   // Connect to WiFi 
   WiFi.begin(ssid, pass);
   delay(200);
