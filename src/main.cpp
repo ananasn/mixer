@@ -281,7 +281,7 @@
 
 bool DEBUG = true;
 
-float ML_PER_SEC = 29.3;
+float ML_PER_SEC = 32.5;
 
 // PINS list
 int THERMAL_SENSOR = 4;
@@ -302,7 +302,7 @@ float tcenter;
 float tctrl;
 
 // Constants settings
-float tleft_target = 30;
+float tleft_target = 35;
 float tright_target = 35;
 float tcenter_target = 40;
 float time_left = ((5 * 1000) / ML_PER_SEC) * 1000;
@@ -340,11 +340,11 @@ ModbusServerWiFi MBserver;
 IPAddress lIP;                     // assigned local IP
 
 // Work address
-// IPAddress local_IP(10, 77, 70, 120);
-// IPAddress gateway(10, 77, 70, 1);
+IPAddress local_IP(10, 77, 70, 120);
+IPAddress gateway(10, 77, 70, 1);
 // Home address
-IPAddress local_IP(192, 168, 1, 120);
-IPAddress gateway(192, 168, 1, 1);
+// IPAddress local_IP(192, 168, 1, 120);
+// IPAddress gateway(192, 168, 1, 1);
 
 IPAddress subnet(255, 255, 255, 0);
 IPAddress primaryDNS(8, 8, 8, 8);   // optional
@@ -367,7 +367,7 @@ void read_temperature()
 
 uint16_t convert_temp(float temp)
 {
-  uint16_t res = 100;
+  uint16_t res = 0;
   
   if (temp < 0) {
     return res;
@@ -595,12 +595,14 @@ void loop()
   info();
 }
 
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 // #include <Arduino.h>
 // #include <TimerMs.h>
 
 
 // int PUMP_LEFT_PIN = 32;
-// uint32_t time_left = 30000;
+// uint32_t time_left = 120000;
 
 // TimerMs timer_left;
 
