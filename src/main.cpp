@@ -302,9 +302,9 @@ float tcenter;
 float tctrl;
 
 // Constants settings
-float tleft_target = 35;
-float tright_target = 35;
-float tcenter_target = 40;
+float tleft_target = 19;
+float tright_target = 40;
+float tcenter_target = 45;
 float time_left = ((5 * 1000) / ML_PER_SEC) * 1000;
 float time_right = ((5 * 1000) / ML_PER_SEC) * 1000;
 float time_wait = 60000;
@@ -397,6 +397,12 @@ ModbusMessage FC03(ModbusMessage request) {
   response.add(convert_temp(tright));
   response.add(convert_temp(tcenter));
   response.add(convert_temp(tctrl));
+  response.add((uint16_t) 0);
+  response.add((uint16_t) start);
+  response.add((uint16_t) pump_left);
+  response.add((uint16_t) pump_right);
+  response.add((uint16_t) mixer);
+  response.add((uint16_t) heater);
 
   // Return the data response
   return response;
