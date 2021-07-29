@@ -292,6 +292,8 @@ int HEATER_PIN = 27;
 
 // Network variables list
 bool start;
+bool heater_left;
+bool heater_right;
 bool pump_left;
 bool pump_right;
 bool mixer;
@@ -302,11 +304,12 @@ float tcenter;
 float tctrl;
 
 // Constants settings
-float tleft_target = 19;
-float tright_target = 40;
-float tcenter_target = 45;
-float time_left = ((5 * 1000) / ML_PER_SEC) * 1000;
-float time_right = ((5 * 1000) / ML_PER_SEC) * 1000;
+float tleft_target = 40;
+float tcenter_target = 60;
+float tright_target = 30;
+
+float time_left = ((9.2 * 1000) / ML_PER_SEC) * 1000;
+float time_right = ((9.2 * 1000) / ML_PER_SEC) * 1000;
 float time_wait = 60000;
 
 // States
@@ -397,8 +400,8 @@ ModbusMessage FC03(ModbusMessage request) {
   response.add(convert_temp(tright));
   response.add(convert_temp(tcenter));
   response.add(convert_temp(tctrl));
-  response.add((uint16_t) 0);
-  response.add((uint16_t) start);
+  response.add((uint16_t) heater_left);
+  response.add((uint16_t) heater_left);
   response.add((uint16_t) pump_left);
   response.add((uint16_t) pump_right);
   response.add((uint16_t) mixer);
@@ -413,7 +416,7 @@ void search_addrs()
 {
   while (true) 
   {
-    if ( ds.search(addr)) 
+    if (ds.search(addr)) 
     {
       Serial.println("ADDR:");
         for (int i=0; i < 8; i++) 
@@ -499,7 +502,9 @@ void setup()
     ;
   }
 
+  sensors.begin();
   sensors.setResolution(12);
+
   timer_left.setTimerMode();
   timer_right.setTimerMode();
   timer_wait.setTimerMode();
@@ -541,38 +546,50 @@ void setup()
 void loop() 
 {
   read_temperature();
-  switch (state) 
-  {
-
+  switch (state) {
     case INITIAL:
-      if (DEBUG) Serial.println("INITIAL");
-      if (start == true) state = INIIAL_HEAT;
+      if (DEBUG) {
+        Serial.println("INITIAL");
+      }
+      if (start) {
+        state = INIIAL_HEAT;
+      }
       break;
 
     case INIIAL_HEAT:
-      if (DEBUG) Serial.println("INITIAL_HEAT");
-      if ((tleft >= tleft_target) and (tright >= tright_target)) 
-      {
-          pump_on(PUMP_LEFT_PIN);
-          pump_on(PUMP_RIGHT_PIN);
-          timer_left.start();
-          timer_right.start();
-          state = FLOW;
+      if (DEBUG) {
+        Serial.println("INITIAL_HEAT");
+      }
+      if (tleft <= tleft_target) {
+        heater_left = true;
+      }
+      if (tright <= tright_target) {
+        heater_right = true;
+      }
+      if ((tleft >= tleft_target) and (tright >= tright_target)) {
+        heater_left = false;
+        heater_right = false;
+
+        pump_on(PUMP_LEFT_PIN);
+        pump_on(PUMP_RIGHT_PIN);
+
+        timer_left.start();
+        timer_right.start();
+        
+        state = FLOW;
       }
       break;
-
     case FLOW:
-      if (DEBUG) Serial.println("FLOW");
-      if (timer_left.tick()) 
-      {
+      if (DEBUG) {
+        Serial.println("FLOW");
+      }
+      if (timer_left.tick()) {
         pump_off(PUMP_LEFT_PIN);
       }
-      if (timer_right.tick()) 
-      {
+      if (timer_right.tick()) {
         pump_off(PUMP_RIGHT_PIN);
       }
-      if (timer_right.elapsed() and timer_left.elapsed()) 
-      {
+      if (timer_right.elapsed() and timer_left.elapsed()) {
         heater_on();
         mixer_on();
         state = MAIN_HEAT;
@@ -606,9 +623,12 @@ void loop()
 // #include <Arduino.h>
 // #include <TimerMs.h>
 
-
+// int FLOW_LEFT_PIN = 10;
+// int FLOW_RIGHT_PIN = 11;
 // int PUMP_LEFT_PIN = 32;
-// uint32_t time_left = 120000;
+
+// uint32_t time_left = 21000;
+// uint32_t flow_left = 0;
 
 // TimerMs timer_left;
 
@@ -622,21 +642,40 @@ void loop()
 //   digitalWrite(pin, LOW);
 // }
 
+// void IRAM_ATTR isr_flow_left() {
+//   flow_left++;
+// }
+
 
 // void setup() 
 // {
+//   Serial.begin(115200);
+//   while (!Serial) {
+//     ;
+//   }
+
+//   attachInterrupt(FLOW_LEFT_PIN, isr_flow_left, FALLING);
+
 //   timer_left.setTimerMode();
 //   timer_left.setTime(time_left);
 //   timer_left.start();
  
 //   pinMode(PUMP_LEFT_PIN, OUTPUT);
 //   pump_on(PUMP_LEFT_PIN);
-// }
 
+//   delay(1000);
+//   Serial.println("START");
+// }
 
 // void loop() 
 // {
-//   if (timer_left.tick()) {
-//     pump_off(PUMP_LEFT_PIN);
+//   // if (timer_left.tick()) {
+//   //   pump_off(PUMP_LEFT_PIN);
+//   // }
+//   if (flow_left >= 1950) {
+//     pump_off(PUMP_LEFT_PIN);  
 //   }
+
+//   Serial.println(flow_left);
+//   delay(10);
 // }
