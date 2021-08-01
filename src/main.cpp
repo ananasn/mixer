@@ -281,7 +281,9 @@
 
 bool DEBUG = true;
 
-float ML_PER_SEC = 32.5;
+///////////////////////
+// General
+//////////////////////
 
 // PINS list
 int THERMAL_SENSOR = 4;
@@ -289,6 +291,8 @@ int MIXER_PIN = 26;
 int PUMP_LEFT_PIN = 32;
 int PUMP_RIGHT_PIN = 33;
 int HEATER_PIN = 27;
+int FLOW_LEFT_PIN = 10;
+int FLOW_RIGHT_PIN = 11;
 
 // Network variables list
 bool start;
@@ -302,15 +306,15 @@ float tleft;
 float tright;
 float tcenter;
 float tctrl;
+uint16_t flow_left;
+uint16_t flow_right;
 
 // Constants settings
 float tleft_target = 40;
 float tcenter_target = 60;
 float tright_target = 30;
-
-float time_left = ((9.2 * 1000) / ML_PER_SEC) * 1000;
-float time_right = ((9.2 * 1000) / ML_PER_SEC) * 1000;
 float time_wait = 60000;
+uint16_t volume = 1950;
 
 // States
 const uint8_t INITIAL = 0;
@@ -321,8 +325,6 @@ const uint8_t WAIT = 4;
 uint8_t state = INITIAL;
 
 // Timers
-TimerMs timer_left(time_left, 0, 1);
-TimerMs timer_right(time_right, 0, 1);
 TimerMs timer_wait(time_wait, 0, 1);
 
 // Sensors
@@ -333,6 +335,10 @@ byte addr_tright[8] = {0x28, 0x78, 0xbf, 0x7, 0xd6, 0x1, 0x3c, 0x90};
 byte addr_tcenter[8] = {0x28, 0x3d, 0x30, 0x7, 0xd6, 0x1, 0x3c, 0xaa};
 byte addr_tctrl[8] = {0x28, 0xd1, 0x82, 0x7, 0xd6, 0x1, 0x3c, 0x32};
 byte addr[8];
+
+////////////////////
+// Modbus settings
+////////////////////
 
 // Wi-Fi
 char ssid[] = "ichiro-home";
@@ -355,19 +361,7 @@ IPAddress secondaryDNS(8, 8, 4, 4); // optional
 
 const uint8_t MY_SERVER(1);
 
-// Reads temperatures from 1-wire bus
-void read_temperature() 
-{
-  sensors.requestTemperatures();
-
-  delay(200);
-
-  tleft = sensors.getTempC(addr_tleft);
-  tright = sensors.getTempC(addr_tright);
-  tcenter = sensors.getTempC(addr_tcenter);
-  tctrl = sensors.getTempC(addr_tctrl);
-}
-
+// Convet temperature to modbus register size
 uint16_t convert_temp(float temp)
 {
   uint16_t res = 0;
@@ -380,7 +374,8 @@ uint16_t convert_temp(float temp)
 }
 
 // Worker function for serverID=1, function code 0x03 or 0x04
-ModbusMessage FC03(ModbusMessage request) {
+ModbusMessage FC03(ModbusMessage request) 
+{
   uint16_t addr = 0;        // Start address to read
   uint16_t wrds = 0;        // Number of words to read
   ModbusMessage response;
@@ -406,10 +401,17 @@ ModbusMessage FC03(ModbusMessage request) {
   response.add((uint16_t) pump_right);
   response.add((uint16_t) mixer);
   response.add((uint16_t) heater);
+  response.add((uint16_t) volume);
+  response.add((uint16_t) flow_left);
+  response.add((uint16_t) flow_right);
 
   // Return the data response
   return response;
 }
+
+/////////////////////
+// Debug functions
+/////////////////////
 
 // Debug function for 1-wire adresses exploring
 void search_addrs() 
@@ -454,7 +456,30 @@ void info()
   Serial.print(" ");
   Serial.print(mixer);
   Serial.print(" ");
-  Serial.println(heater);
+  Serial.print(heater);
+  Serial.print(" ");
+  Serial.print(volume);
+  Serial.print(" ");
+  Serial.print(flow_left);
+  Serial.print(" ");
+  Serial.println(flow_right);
+}
+
+///////////////////////////////
+// Control functions
+///////////////////////////////
+
+// Reads temperatures from 1-wire bus
+void read_temperature() 
+{
+  sensors.requestTemperatures();
+
+  delay(200);
+
+  tleft = sensors.getTempC(addr_tleft);
+  tright = sensors.getTempC(addr_tright);
+  tcenter = sensors.getTempC(addr_tcenter);
+  tctrl = sensors.getTempC(addr_tctrl);
 }
 
 void pump_on(int pin) 
@@ -495,6 +520,32 @@ void heater_off()
   heater = false;
 }
 
+//Worker for interruption from left flowsensor
+void IRAM_ATTR isr_flow_left() 
+{
+  if (flow_left >= volume) 
+  {
+    detachInterrupt(FLOW_LEFT_PIN);
+    pump_off(PUMP_LEFT_PIN);
+    flow_left = 0;
+    return;
+  }
+  flow_left++;
+}
+
+//Worker for interruption from right flowsensor
+void IRAM_ATTR isr_flow_right() 
+{
+  if (flow_right >= volume) 
+  {
+    detachInterrupt(FLOW_RIGHT_PIN);
+    pump_off(PUMP_RIGHT_PIN);
+    flow_right = 0;
+    return;
+  }
+  flow_right++;
+}
+
 void setup() 
 {
   Serial.begin(115200);
@@ -505,14 +556,15 @@ void setup()
   sensors.begin();
   sensors.setResolution(12);
 
-  timer_left.setTimerMode();
-  timer_right.setTimerMode();
   timer_wait.setTimerMode();
 
   pinMode(PUMP_LEFT_PIN, OUTPUT);
   pinMode(PUMP_RIGHT_PIN, OUTPUT);
   pinMode(HEATER_PIN, OUTPUT);
   pinMode(MIXER_PIN, OUTPUT);
+  pinMode(FLOW_LEFT_PIN, INPUT_PULLUP);
+  pinMode(FLOW_RIGHT_PIN, INPUT_PULLUP);
+
 
   // Register the worker function with the Modbus server
   MBserver.registerWorker(MY_SERVER, READ_HOLD_REGISTER, &FC03);
@@ -573,23 +625,19 @@ void loop()
         pump_on(PUMP_LEFT_PIN);
         pump_on(PUMP_RIGHT_PIN);
 
-        timer_left.start();
-        timer_right.start();
+        attachInterrupt(FLOW_LEFT_PIN, isr_flow_left, FALLING);
+        attachInterrupt(FLOW_RIGHT_PIN, isr_flow_right, FALLING);
         
         state = FLOW;
+
       }
       break;
     case FLOW:
       if (DEBUG) {
         Serial.println("FLOW");
       }
-      if (timer_left.tick()) {
-        pump_off(PUMP_LEFT_PIN);
-      }
-      if (timer_right.tick()) {
-        pump_off(PUMP_RIGHT_PIN);
-      }
-      if (timer_right.elapsed() and timer_left.elapsed()) {
+
+      if (!pump_left and !pump_right) {
         heater_on();
         mixer_on();
         state = MAIN_HEAT;
@@ -617,65 +665,3 @@ void loop()
   }
   info();
 }
-
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-// #include <Arduino.h>
-// #include <TimerMs.h>
-
-// int FLOW_LEFT_PIN = 10;
-// int FLOW_RIGHT_PIN = 11;
-// int PUMP_LEFT_PIN = 32;
-
-// uint32_t time_left = 21000;
-// uint32_t flow_left = 0;
-
-// TimerMs timer_left;
-
-// void pump_on(int pin) 
-// {
-//   digitalWrite(pin, HIGH);
-// }
-
-// void pump_off(int pin) 
-// {
-//   digitalWrite(pin, LOW);
-// }
-
-// void IRAM_ATTR isr_flow_left() {
-//   flow_left++;
-// }
-
-
-// void setup() 
-// {
-//   Serial.begin(115200);
-//   while (!Serial) {
-//     ;
-//   }
-
-//   attachInterrupt(FLOW_LEFT_PIN, isr_flow_left, FALLING);
-
-//   timer_left.setTimerMode();
-//   timer_left.setTime(time_left);
-//   timer_left.start();
- 
-//   pinMode(PUMP_LEFT_PIN, OUTPUT);
-//   pump_on(PUMP_LEFT_PIN);
-
-//   delay(1000);
-//   Serial.println("START");
-// }
-
-// void loop() 
-// {
-//   // if (timer_left.tick()) {
-//   //   pump_off(PUMP_LEFT_PIN);
-//   // }
-//   if (flow_left >= 1950) {
-//     pump_off(PUMP_LEFT_PIN);  
-//   }
-
-//   Serial.println(flow_left);
-//   delay(10);
-// }
