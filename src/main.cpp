@@ -280,12 +280,13 @@
 #include <TimerMs.h>
 
 bool DEBUG = true;
+uint16_t ML_PER_TICK = 5;
 
 ///////////////////////
 // General
 //////////////////////
 
-// PINS list
+// PINS list.
 int THERMAL_SENSOR = 4;
 int MIXER_PIN = 26;
 int PUMP_LEFT_PIN = 32;
@@ -294,7 +295,7 @@ int HEATER_PIN = 27;
 int FLOW_LEFT_PIN = 10;
 int FLOW_RIGHT_PIN = 11;
 
-// Network variables list
+// Network variables list.
 bool start;
 bool heater_left;
 bool heater_right;
@@ -306,17 +307,20 @@ float tleft;
 float tright;
 float tcenter;
 float tctrl;
-uint16_t flow_left;
-uint16_t flow_right;
+uint16_t volume_left;
+uint16_t volume_right;
 
-// Constants settings
-float tleft_target = 40;
-float tcenter_target = 60;
+// Constants settings.
+float tleft_target = 30;
+float tcenter_target = 35;
 float tright_target = 30;
-float time_wait = 60000;
-uint16_t volume = 1950;
 
-// States
+uint16_t vleft_target = 5000 * ML_PER_TICK;
+uint16_t vright_target = 5000 * ML_PER_TICK;
+
+float time_wait = 60000;
+
+// States.
 const uint8_t INITIAL = 0;
 const uint8_t INIIAL_HEAT = 1;
 const uint8_t FLOW = 2;
@@ -324,10 +328,10 @@ const uint8_t MAIN_HEAT = 3;
 const uint8_t WAIT = 4;
 uint8_t state = INITIAL;
 
-// Timers
+// Timers.
 TimerMs timer_wait(time_wait, 0, 1);
 
-// Sensors
+// Sensors.
 OneWire ds(THERMAL_SENSOR);
 DallasTemperature sensors(&ds);
 byte addr_tleft[8] = {0x28, 0xff, 0xed, 0x7, 0xd6, 0x1, 0x3c, 0xe9};
@@ -362,7 +366,7 @@ IPAddress secondaryDNS(8, 8, 4, 4); // optional
 
 const uint8_t MY_SERVER(1);
 
-// Convet temperature to modbus register size
+// Convet temperature to modbus register size.
 uint16_t convert_temp(float temp)
 {
   uint16_t res = 0;
@@ -374,7 +378,13 @@ uint16_t convert_temp(float temp)
   }
 }
 
-// Worker function for serverID=1, function code 0x03 or 0x04
+// Convet volume to modbus register size.
+uint16_t convert_volume(uint16_t volume)
+{
+  return (uint16_t)(volume / ML_PER_TICK);
+}
+
+// Worker function for server ID=1, function code 0x03 or 0x04.
 ModbusMessage FC03(ModbusMessage request) 
 {
   uint16_t addr = 0;        // Start address to read
@@ -402,9 +412,8 @@ ModbusMessage FC03(ModbusMessage request)
   response.add((uint16_t) pump_right);
   response.add((uint16_t) mixer);
   response.add((uint16_t) heater);
-  response.add((uint16_t) volume);
-  response.add((uint16_t) flow_left);
-  response.add((uint16_t) flow_right);
+  response.add(convert_volume(volume_left));
+  response.add(convert_volume(volume_right));
 
   // Return the data response
   return response;
@@ -440,7 +449,7 @@ void search_addrs()
   }
 }
 
-// Prints all status variables to Serial
+// Prints all status variables to Serial.
 void info() 
 {
   Serial.print(tleft);
@@ -459,11 +468,9 @@ void info()
   Serial.print(" ");
   Serial.print(heater);
   Serial.print(" ");
-  Serial.print(volume);
+  Serial.print(volume_left);
   Serial.print(" ");
-  Serial.print(flow_left);
-  Serial.print(" ");
-  Serial.println(flow_right);
+  Serial.println(volume_right);
 }
 
 ///////////////////////////////
@@ -486,8 +493,11 @@ void read_temperature()
 void pump_on(int pin) 
 {
   digitalWrite(pin, HIGH);
-  if (pin == PUMP_LEFT_PIN) pump_left = true;
-  else pump_right = true;
+  if (pin == PUMP_LEFT_PIN) {
+    pump_left = true;
+  } else {
+    pump_right = true;
+  }
 }
 
 void pump_off(int pin) 
@@ -521,30 +531,30 @@ void heater_off()
   heater = false;
 }
 
-//Worker for interruption from left flowsensor
+// Worker for interruption from left flowsensor.
 void IRAM_ATTR isr_flow_left() 
 {
-  if (flow_left >= volume) 
+  if (volume_left >= vleft_target) 
   {
     detachInterrupt(FLOW_LEFT_PIN);
     pump_off(PUMP_LEFT_PIN);
-    flow_left = 0;
+    volume_left = 0;
     return;
   }
-  flow_left++;
+  volume_left++;
 }
 
-//Worker for interruption from right flowsensor
+// Worker for interruption from right flowsensor.
 void IRAM_ATTR isr_flow_right() 
 {
-  if (flow_right >= volume) 
+  if (volume_right >= vright_target) 
   {
     detachInterrupt(FLOW_RIGHT_PIN);
     pump_off(PUMP_RIGHT_PIN);
-    flow_right = 0;
+    volume_right = 0;
     return;
   }
-  flow_right++;
+  volume_right++;
 }
 
 void setup() 
@@ -630,7 +640,6 @@ void loop()
         attachInterrupt(FLOW_RIGHT_PIN, isr_flow_right, FALLING);
         
         state = FLOW;
-
       }
       break;
     case FLOW:
