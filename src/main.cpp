@@ -292,8 +292,8 @@ int MIXER_PIN = 26;
 int PUMP_LEFT_PIN = 32;
 int PUMP_RIGHT_PIN = 33;
 int HEATER_PIN = 27;
-int FLOW_LEFT_PIN = 10;
-int FLOW_RIGHT_PIN = 11;
+int FLOW_LEFT_PIN = 14;
+int FLOW_RIGHT_PIN = 15;
 
 // Network variables list.
 bool start;
@@ -307,16 +307,16 @@ float tleft;
 float tright;
 float tcenter;
 float tctrl;
-uint16_t volume_left;
-uint16_t volume_right;
+uint32_t volume_left;
+uint32_t volume_right;
 
 // Constants settings.
-float tleft_target = 30;
-float tcenter_target = 35;
-float tright_target = 30;
+float tleft_target = 27;
+float tcenter_target = 29;
+float tright_target = 27;
 
-uint16_t vleft_target = 5000 * ML_PER_TICK;
-uint16_t vright_target = 5000 * ML_PER_TICK;
+uint32_t vleft_target = 1000 * ML_PER_TICK;
+uint32_t vright_target = 1000 * ML_PER_TICK;
 
 float time_wait = 60000;
 
@@ -379,7 +379,7 @@ uint16_t convert_temp(float temp)
 }
 
 // Convet volume to modbus register size.
-uint16_t convert_volume(uint16_t volume)
+uint16_t convert_volume(uint32_t volume)
 {
   return (uint16_t)(volume / ML_PER_TICK);
 }
@@ -391,7 +391,8 @@ ModbusMessage FC03(ModbusMessage request)
   uint16_t wrds = 0;        // Number of words to read
   ModbusMessage response;
 
-  // Get addr and words from data array. Values are MSB-first, get() will convert to binary
+  // Get addr and words from data array. Values are MSB-first, 
+  // get() will convert to binary..
   request.get(2, addr);
   request.get(4, wrds);
 
@@ -426,20 +427,15 @@ ModbusMessage FC03(ModbusMessage request)
 // Debug function for 1-wire adresses exploring
 void search_addrs() 
 {
-  while (true) 
-  {
-    if (ds.search(addr)) 
-    {
+  while (true) {
+    if (ds.search(addr)) {
       Serial.println("ADDR:");
-        for (int i=0; i < 8; i++) 
-        {
+        for (int i=0; i < 8; i++) {
           Serial.print(addr[i], HEX);
           Serial.print(" ");
         }
       Serial.println();
-    }
-    else 
-    {
+    } else {
       Serial.println("No more addresses.");
       Serial.println();
       ds.reset_search();
@@ -534,8 +530,7 @@ void heater_off()
 // Worker for interruption from left flowsensor.
 void IRAM_ATTR isr_flow_left() 
 {
-  if (volume_left >= vleft_target) 
-  {
+  if (volume_left >= vleft_target) {
     detachInterrupt(FLOW_LEFT_PIN);
     pump_off(PUMP_LEFT_PIN);
     volume_left = 0;
@@ -547,8 +542,7 @@ void IRAM_ATTR isr_flow_left()
 // Worker for interruption from right flowsensor.
 void IRAM_ATTR isr_flow_right() 
 {
-  if (volume_right >= vright_target) 
-  {
+  if (volume_right >= vright_target) {
     detachInterrupt(FLOW_RIGHT_PIN);
     pump_off(PUMP_RIGHT_PIN);
     volume_right = 0;
@@ -571,11 +565,12 @@ void setup()
 
   pinMode(PUMP_LEFT_PIN, OUTPUT);
   pinMode(PUMP_RIGHT_PIN, OUTPUT);
+
   pinMode(HEATER_PIN, OUTPUT);
   pinMode(MIXER_PIN, OUTPUT);
-  pinMode(FLOW_LEFT_PIN, INPUT_PULLUP);
-  pinMode(FLOW_RIGHT_PIN, INPUT_PULLUP);
 
+  pinMode(FLOW_LEFT_PIN, INPUT);
+  pinMode(FLOW_RIGHT_PIN, INPUT);
 
   // Register the worker function with the Modbus server
   MBserver.registerWorker(MY_SERVER, READ_HOLD_REGISTER, &FC03);
@@ -587,7 +582,7 @@ void setup()
     Serial.println("STA Failed to configure");
   }
 
-  // Connect to WiFi 
+  // Connect to WiFi. 
   WiFi.begin(ssid, pass);
   delay(200);
   while (WiFi.status() != WL_CONNECTED) {
@@ -595,12 +590,12 @@ void setup()
     delay(1000);
   }
 
-  // print local IP address:
+  // print local IP address.
   lIP = WiFi.localIP();
   Serial.printf("My IP address: %u.%u.%u.%u\n", lIP[0], lIP[1], lIP[2], lIP[3]);
 
   // Start the Modbus TCP server:
-  // Port number 502, maximum of 4 clients in parallel, 10 seconds timeout
+  // Port number 502, maximum of 4 clients in parallel, 10 seconds timeout.
   MBserver.start(502, 4, 10000);
   
   start = true;
@@ -609,6 +604,7 @@ void setup()
 void loop() 
 {
   read_temperature();
+
   switch (state) {
     case INITIAL:
       if (DEBUG) {
@@ -618,15 +614,15 @@ void loop()
         state = INIIAL_HEAT;
       }
       break;
-
+    ///////////////////////////////////////////////////////////////////////////
     case INIIAL_HEAT:
       if (DEBUG) {
         Serial.println("INITIAL_HEAT");
       }
-      if (tleft <= tleft_target) {
+      if (tleft < tleft_target) {
         heater_left = true;
       }
-      if (tright <= tright_target) {
+      if (tright < tright_target) {
         heater_right = true;
       }
       if ((tleft >= tleft_target) and (tright >= tright_target)) {
@@ -642,36 +638,112 @@ void loop()
         state = FLOW;
       }
       break;
+    ///////////////////////////////////////////////////////////////////////////
     case FLOW:
       if (DEBUG) {
         Serial.println("FLOW");
       }
 
       if (!pump_left and !pump_right) {
+    //   if ((volume_left >= vleft_target) and (volume_right >= vright_target)) {
+    //   if ((volume_left >= vleft_target)) {  
+        // pump_off(PUMP_LEFT_PIN);
+        // pump_off(PUMP_RIGHT_PIN);
+
         heater_on();
         mixer_on();
+        
         state = MAIN_HEAT;
       }
       break;
-
+    ///////////////////////////////////////////////////////////////////////////
     case MAIN_HEAT:
-      if (DEBUG) Serial.println("MAIN_HEAT");
-      if (tcenter >= tcenter_target) 
-      {
+      if (DEBUG) {
+        Serial.println("MAIN_HEAT");
+      }
+      if (tcenter >= tcenter_target) {
         mixer_off();
         heater_off();
+
         timer_wait.start();
         state = WAIT;
       }
       break;
-
+    ///////////////////////////////////////////////////////////////////////////
     case WAIT:
-      if (DEBUG) Serial.println("WAIT");
+      if (DEBUG) {
+        Serial.println("WAIT");
+      }
       if (timer_wait.tick()) {
         start = false;
         state = INITIAL;
       }
       break;
   }
+
   info();
 }
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// #include <Arduino.h>
+// #include <TimerMs.h>
+
+// int FLOW_LEFT_PIN = 12;
+// int FLOW_RIGHT_PIN = 13;
+// int PUMP_LEFT_PIN = 32;
+
+// uint32_t time_left = 21000;
+// uint32_t flow_left = 0;
+
+// TimerMs timer_left;
+
+// void pump_on(int pin) 
+// {
+//   digitalWrite(pin, HIGH);
+// }
+
+// void pump_off(int pin) 
+// {
+//   digitalWrite(pin, LOW);
+// }
+
+// void IRAM_ATTR isr_flow_left() {
+//   flow_left++;
+// }
+
+
+// void setup() 
+// {
+//   Serial.begin(115200);
+//   while (!Serial) {
+//     ;
+//   }
+
+//   pinMode(FLOW_LEFT_PIN, INPUT_PULLDOWN);
+//   attachInterrupt(FLOW_LEFT_PIN, isr_flow_left, FALLING);
+
+//   timer_left.setTimerMode();
+//   timer_left.setTime(time_left);
+//   timer_left.start();
+ 
+//   pinMode(PUMP_LEFT_PIN, OUTPUT);
+//   pump_on(PUMP_LEFT_PIN);
+
+//   delay(1000);
+//   Serial.println("START");
+// }
+
+// void loop() 
+// {
+//   // if (timer_left.tick()) {
+//   //   pump_off(PUMP_LEFT_PIN);
+//   // }
+//   if (flow_left >= 1950) {
+//     pump_off(PUMP_LEFT_PIN);
+//     detachInterrupt(PUMP_LEFT_PIN);  
+//   }
+
+//   Serial.println(flow_left);
+//   delay(10);
+// }
