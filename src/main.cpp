@@ -351,6 +351,7 @@ IPAddress lIP;                     // assigned local IP
 // Work address
 IPAddress local_IP(10, 77, 70, 120);
 IPAddress gateway(10, 77, 70, 1);
+
 // Home address
 // IPAddress local_IP(192, 168, 1, 120);
 // IPAddress gateway(192, 168, 1, 1);
