@@ -280,7 +280,7 @@
 #include <TimerMs.h>
 
 bool DEBUG = true;
-uint16_t ML_PER_TICK = 5;
+uint16_t ML_PER_TICK = 10;
 
 ///////////////////////
 // General
@@ -424,7 +424,7 @@ ModbusMessage FC03(ModbusMessage request)
 // Debug functions
 /////////////////////
 
-// Debug function for 1-wire adresses exploring
+// Debug function for 1-wire adresses exploring/
 void search_addrs() 
 {
   while (true) {
@@ -486,6 +486,7 @@ void read_temperature()
   tctrl = sensors.getTempC(addr_tctrl);
 }
 
+
 void pump_on(int pin) 
 {
   digitalWrite(pin, HIGH);
@@ -496,11 +497,16 @@ void pump_on(int pin)
   }
 }
 
+
 void pump_off(int pin) 
 {
   digitalWrite(pin, LOW);
-  if (pin == PUMP_LEFT_PIN) pump_left = false;
-  else pump_right = false;
+
+  if (pin == PUMP_LEFT_PIN) {
+    pump_left = false;
+  } else {
+    pump_right = false;
+  }
 }
 
 void mixer_on() 
@@ -533,7 +539,7 @@ void IRAM_ATTR isr_flow_left()
   if (volume_left >= vleft_target) {
     detachInterrupt(FLOW_LEFT_PIN);
     pump_off(PUMP_LEFT_PIN);
-    volume_left = 0;
+    // volume_left = 0;
     return;
   }
   volume_left++;
@@ -545,7 +551,7 @@ void IRAM_ATTR isr_flow_right()
   if (volume_right >= vright_target) {
     detachInterrupt(FLOW_RIGHT_PIN);
     pump_off(PUMP_RIGHT_PIN);
-    volume_right = 0;
+    // volume_right = 0;
     return;
   }
   volume_right++;
@@ -572,9 +578,9 @@ void setup()
   pinMode(FLOW_LEFT_PIN, INPUT);
   pinMode(FLOW_RIGHT_PIN, INPUT);
 
-  // Register the worker function with the Modbus server
+  // Register the worker function with the Modbus server.
   MBserver.registerWorker(MY_SERVER, READ_HOLD_REGISTER, &FC03);
-  // Register the worker function again for another FC
+  // Register the worker function again for another FC.
   MBserver.registerWorker(MY_SERVER, READ_INPUT_REGISTER, &FC03);
 
   // Configures static IP address
@@ -645,11 +651,6 @@ void loop()
       }
 
       if (!pump_left and !pump_right) {
-    //   if ((volume_left >= vleft_target) and (volume_right >= vright_target)) {
-    //   if ((volume_left >= vleft_target)) {  
-        // pump_off(PUMP_LEFT_PIN);
-        // pump_off(PUMP_RIGHT_PIN);
-
         heater_on();
         mixer_on();
         
@@ -683,67 +684,3 @@ void loop()
 
   info();
 }
-
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-// #include <Arduino.h>
-// #include <TimerMs.h>
-
-// int FLOW_LEFT_PIN = 12;
-// int FLOW_RIGHT_PIN = 13;
-// int PUMP_LEFT_PIN = 32;
-
-// uint32_t time_left = 21000;
-// uint32_t flow_left = 0;
-
-// TimerMs timer_left;
-
-// void pump_on(int pin) 
-// {
-//   digitalWrite(pin, HIGH);
-// }
-
-// void pump_off(int pin) 
-// {
-//   digitalWrite(pin, LOW);
-// }
-
-// void IRAM_ATTR isr_flow_left() {
-//   flow_left++;
-// }
-
-
-// void setup() 
-// {
-//   Serial.begin(115200);
-//   while (!Serial) {
-//     ;
-//   }
-
-//   pinMode(FLOW_LEFT_PIN, INPUT_PULLDOWN);
-//   attachInterrupt(FLOW_LEFT_PIN, isr_flow_left, FALLING);
-
-//   timer_left.setTimerMode();
-//   timer_left.setTime(time_left);
-//   timer_left.start();
- 
-//   pinMode(PUMP_LEFT_PIN, OUTPUT);
-//   pump_on(PUMP_LEFT_PIN);
-
-//   delay(1000);
-//   Serial.println("START");
-// }
-
-// void loop() 
-// {
-//   // if (timer_left.tick()) {
-//   //   pump_off(PUMP_LEFT_PIN);
-//   // }
-//   if (flow_left >= 1950) {
-//     pump_off(PUMP_LEFT_PIN);
-//     detachInterrupt(PUMP_LEFT_PIN);  
-//   }
-
-//   Serial.println(flow_left);
-//   delay(10);
-// }
